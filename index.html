@@ -289,7 +289,6 @@
 
 <script>
 // ============== CONFIG ==============
-const LOYVERSE_TOKEN = "ea72d0bcfe4a438aad213a106c9aea46";
 const ADMIN_PIN = "0084";
 
 const UPSTASH_URL = "https://informed-fawn-114507.upstash.io";
@@ -331,10 +330,8 @@ async function redisSet(key, value){
 // ============== HELPERS LOYVERSE ==============
 // Busca un cliente por código de cliente (DNI)
 async function buscarClientePorDNI(dni){
-  const url = `https://api.loyverse.com/v1.0/customers?customer_code=${encodeURIComponent(dni)}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }
-  });
+  const url = `https://proxybeneficios.vercel.app/api/loyverse-customer?dni=${encodeURIComponent(dni)}`;
+  const res = await fetch(url);
   if(!res.ok){
     let detalle = "";
     try{ detalle = await res.text(); }catch(_){}
