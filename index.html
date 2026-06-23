@@ -297,17 +297,16 @@ const BENEFITS_KEY = "raiden:beneficios:list";
 
 // ============== HELPERS REDIS (Upstash REST) ==============
 async function redisGet(key){
-  try{
-    const res = await fetch(`${UPSTASH_URL}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
-    });
-    if(!res.ok) throw new Error("Redis GET fallo: " + res.status);
-    const data = await res.json();
-    return data.result ? JSON.parse(data.result) : null;
-  }catch(e){
-    console.error("redisGet error:", e);
-    return null;
+  const res = await fetch(`${UPSTASH_URL}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
+  });
+  if(!res.ok){
+    let detalle = "";
+    try{ detalle = await res.text(); }catch(_){}
+    throw new Error(`Redis ${res.status}: ${detalle || res.statusText}`);
   }
+  const data = await res.json();
+  return data.result ? JSON.parse(data.result) : null;
 }
 
 async function redisSet(key, value){
@@ -336,7 +335,9 @@ async function buscarClientePorDNI(dni){
     headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }
   });
   if(!res.ok){
-    throw new Error("Error consultando Loyverse: " + res.status);
+    let detalle = "";
+    try{ detalle = await res.text(); }catch(_){}
+    throw new Error(`Loyverse ${res.status}: ${detalle || res.statusText}`);
   }
   const data = await res.json();
   if(!data.customers || data.customers.length === 0){
@@ -387,7 +388,7 @@ async function buscarPuntos(){
 
   }catch(e){
     console.error(e);
-    resultArea.innerHTML = `<div class="error-msg">Hubo un problema al consultar. Intentá de nuevo en un momento.</div>`;
+    resultArea.innerHTML = `<div class="error-msg">Error técnico: ${escapeHtml(e.message || String(e))}</div>`;
   }finally{
     searchBtn.disabled = false;
   }
@@ -489,8 +490,13 @@ addBenefitBtn.addEventListener("click", addBenefit);
 
 async function loadAdminBenefits(){
   adminList.innerHTML = `<div class="loading">Cargando...</div>`;
-  benefits = await redisGet(BENEFITS_KEY) || [];
-  renderAdminList();
+  try{
+    benefits = await redisGet(BENEFITS_KEY) || [];
+    renderAdminList();
+  }catch(e){
+    console.error(e);
+    adminList.innerHTML = `<div class="error-msg">Error técnico: ${escapeHtml(e.message || String(e))}</div>`;
+  }
 }
 
 function renderAdminList(){
