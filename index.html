@@ -308,7 +308,62 @@
     z-index:999;
     box-shadow:0 4px 16px rgba(0,0,0,0.4);
     border:1px solid rgba(240,204,110,0.25);
+    animation:toast-in 0.25s ease-out;
   }
+  .toast.toast-out{
+    animation:toast-out 0.2s ease-in forwards;
+  }
+
+  /* ============== ANIMACIONES ============== */
+  @keyframes fade-in-up{
+    from{opacity:0; transform:translateY(10px);}
+    to{opacity:1; transform:translateY(0);}
+  }
+  @keyframes fade-in{
+    from{opacity:0;}
+    to{opacity:1;}
+  }
+  @keyframes toast-in{
+    from{opacity:0; transform:translate(-50%, 10px);}
+    to{opacity:1; transform:translate(-50%, 0);}
+  }
+  @keyframes toast-out{
+    from{opacity:1; transform:translate(-50%, 0);}
+    to{opacity:0; transform:translate(-50%, 10px);}
+  }
+  @keyframes spin{
+    to{transform:rotate(360deg);}
+  }
+  @keyframes progress-grow{
+    from{width:0%;}
+  }
+
+  header{animation:fade-in-up 0.5s ease-out;}
+  #clientView > .card{animation:fade-in-up 0.5s ease-out 0.1s backwards;}
+  .membership{animation:fade-in-up 0.45s ease-out;}
+  .error-msg{animation:fade-in-up 0.35s ease-out;}
+
+  .spinner-wrap{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    padding:24px 0;
+    color:var(--muted);
+    font-size:0.88rem;
+  }
+  .spinner{
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    border:2px solid var(--card-line);
+    border-top-color:var(--gold-1);
+    animation:spin 0.7s linear infinite;
+  }
+
+  .progress-fill{animation:progress-grow 0.7s ease-out 0.1s backwards;}
+
+  .benefit-row{animation:fade-in 0.4s ease-out backwards;}
 </style>
 </head>
 <body>
@@ -446,7 +501,7 @@ async function buscarPuntos(){
     return;
   }
 
-  resultArea.innerHTML = `<div class="loading">Buscando tus puntos...</div>`;
+  resultArea.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div> Buscando tus puntos...</div>`;
   searchBtn.disabled = true;
 
   try{
@@ -502,11 +557,11 @@ function renderResultado(nombre, puntos, listaBeneficios){
   if(ordenados.length === 0){
     benefitsHtml = `<p style="color:var(--muted); text-align:center; margin:0; font-size:0.88rem;">Todavía no hay beneficios cargados.</p>`;
   }else{
-    benefitsHtml = ordenados.map(b => {
+    benefitsHtml = ordenados.map((b, i) => {
       const alcanza = puntos >= b.points;
       const esElProximo = proximo && b.id === proximo.id;
       return `
-        <div class="benefit-row${esElProximo ? " highlight" : ""}">
+        <div class="benefit-row${esElProximo ? " highlight" : ""}" style="animation-delay:${0.15 + i * 0.06}s;">
           <div class="benefit-info">
             <div class="benefit-name">${escapeHtml(b.name)}</div>
             <div class="benefit-points">${b.points} puntos${!alcanza ? ` · faltan ${b.points - puntos}` : ""}</div>
@@ -624,7 +679,7 @@ async function clearAllBenefits(){
 }
 
 async function loadAdminBenefits(){
-  adminList.innerHTML = `<div class="loading">Cargando...</div>`;
+  adminList.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div> Cargando...</div>`;
   try{
     benefits = await redisGet(BENEFITS_KEY) || [];
     renderAdminList();
@@ -742,7 +797,10 @@ function showToast(msg){
   toast.textContent = msg;
   document.body.appendChild(toast);
 
-  setTimeout(() => toast.remove(), 2500);
+  setTimeout(() => {
+    toast.classList.add("toast-out");
+    setTimeout(() => toast.remove(), 200);
+  }, 2300);
 }
 </script>
 
