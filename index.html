@@ -330,7 +330,8 @@ async function redisSet(key, value){
 // ============== HELPERS LOYVERSE ==============
 // Busca un cliente por código de cliente (DNI)
 async function buscarClientePorDNI(dni){
-  const url = `https://api.loyverse.com/v1.0/customers?customer_code=${encodeURIComponent(dni)}`;
+  const targetUrl = `https://api.loyverse.com/v1.0/customers?customer_code=${encodeURIComponent(dni)}`;
+  const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }
   });
