@@ -280,6 +280,7 @@
       <h3 style="margin-top:0;">Beneficios cargados</h3>
       <div id="adminList"></div>
       <p id="emptyAdminMsg" class="hidden" style="color:var(--muted); font-size:0.85rem; text-align:center;">Todavía no cargaste ningún beneficio.</p>
+      <button class="btn-danger" id="clearAllBtn" style="margin-top:14px;">Vaciar todo</button>
     </div>
 
     <button class="btn-secondary" id="logoutAdminBtn">Cerrar panel</button>
@@ -317,7 +318,7 @@ async function redisSet(key, value){
         Authorization: `Bearer ${UPSTASH_TOKEN}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(JSON.stringify(value))
+      body: JSON.stringify(value)
     });
     if(!res.ok) throw new Error("Redis SET fallo: " + res.status);
     return true;
@@ -488,6 +489,32 @@ const adminList = document.getElementById("adminList");
 const emptyAdminMsg = document.getElementById("emptyAdminMsg");
 
 addBenefitBtn.addEventListener("click", addBenefit);
+
+const clearAllBtn = document.getElementById("clearAllBtn");
+clearAllBtn.addEventListener("click", clearAllBenefits);
+
+async function clearAllBenefits(){
+  if(benefits.length === 0){
+    showToast("No hay nada para vaciar");
+    return;
+  }
+  if(!confirm(`¿Seguro que querés borrar los ${benefits.length} beneficio(s) cargados? Esta acción no se puede deshacer.`)) return;
+  if(!confirm("Confirmá de nuevo: se va a borrar TODO el listado de beneficios.")) return;
+
+  clearAllBtn.disabled = true;
+  const backup = [...benefits];
+  benefits = [];
+
+  const ok = await redisSet(BENEFITS_KEY, benefits);
+  if(ok){
+    renderAdminList();
+    showToast("Listado vaciado");
+  }else{
+    benefits = backup;
+    showToast("Error al vaciar, intentá de nuevo");
+  }
+  clearAllBtn.disabled = false;
+}
 
 async function loadAdminBenefits(){
   adminList.innerHTML = `<div class="loading">Cargando...</div>`;
