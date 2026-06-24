@@ -472,6 +472,14 @@
       <button class="btn-danger" id="clearAllBtn" style="margin-top:14px;">Vaciar todo</button>
     </div>
 
+    <div class="card">
+      <h3 style="margin-top:0;">Historial de consultas</h3>
+      <p style="color:var(--muted); font-size:0.78rem; margin-top:-8px; margin-bottom:14px;">Últimas 300 búsquedas de DNI realizadas en la app.</p>
+      <div id="historyList"></div>
+      <p id="emptyHistoryMsg" class="hidden" style="color:var(--muted); font-size:0.85rem; text-align:center;">Todavía no hay consultas registradas.</p>
+      <button class="btn-danger" id="clearHistoryBtn" style="margin-top:14px;">Borrar historial</button>
+    </div>
+
     <button class="btn-secondary" id="logoutAdminBtn">Cerrar panel</button>
   </div>
 </div>
@@ -495,6 +503,8 @@ const ADMIN_PIN = "0084";
 const UPSTASH_URL = "https://informed-fawn-114507.upstash.io";
 const UPSTASH_TOKEN = "gQAAAAAAAb9LAAIgcDE5Njg2NjIzMjM2NTg0ZWFhYTRkOGZkZjkxNWRjYTA2Mg";
 const BENEFITS_KEY = "raiden:beneficios:list";
+const HISTORY_KEY = "raiden:historial:consultas";
+const HISTORY_MAX = 300;
 
 // ============== HELPERS REDIS (Upstash REST) ==============
 async function redisGet(key){
@@ -558,6 +568,23 @@ dniInput.addEventListener("keypress", (e) => {
   if(e.key === "Enter") buscarPuntos();
 });
 
+async function registrarConsulta(dni, encontrado, nombre){
+  try{
+    const historial = await redisGet(HISTORY_KEY) || [];
+    historial.unshift({
+      dni,
+      encontrado,
+      nombre: nombre || null,
+      fecha: new Date().toISOString()
+    });
+    const recortado = historial.slice(0, HISTORY_MAX);
+    await redisSet(HISTORY_KEY, recortado);
+  }catch(e){
+    // El registro de historial nunca debe romper la busqueda del cliente.
+    console.error("No se pudo registrar la consulta:", e);
+  }
+}
+
 async function buscarPuntos(){
   const dni = dniInput.value.trim();
   if(!dni){
@@ -572,6 +599,7 @@ async function buscarPuntos(){
     const cliente = await buscarClientePorDNI(dni);
 
     if(!cliente){
+      registrarConsulta(dni, false, null);
       resultArea.innerHTML = `<div class="error-msg">No encontramos un cliente con ese DNI. Verificá el número o consultá en el local.</div>`;
       searchBtn.disabled = false;
       return;
@@ -579,6 +607,8 @@ async function buscarPuntos(){
 
     const puntos = Math.floor(cliente.total_points || 0);
     const nombre = cliente.name || "";
+
+    registrarConsulta(dni, true, nombre);
 
     // Cargar beneficios actuales desde Redis (siempre frescos)
     const listaBeneficios = await redisGet(BENEFITS_KEY) || [];
@@ -704,6 +734,7 @@ async function checkPin(){
     adminLoginView.classList.add("hidden");
     adminView.classList.remove("hidden");
     await loadAdminBenefits();
+    await loadHistory();
   }else{
     showToast("PIN incorrecto");
   }
@@ -857,6 +888,74 @@ window.deleteBenefit = async function(id){
     showToast("Error al borrar, intentá de nuevo");
   }
 };
+
+// ============== UI: ADMIN - HISTORIAL DE CONSULTAS ==============
+let history = [];
+const historyList = document.getElementById("historyList");
+const emptyHistoryMsg = document.getElementById("emptyHistoryMsg");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+
+clearHistoryBtn.addEventListener("click", clearHistory);
+
+async function loadHistory(){
+  historyList.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div> Cargando...</div>`;
+  try{
+    history = await redisGet(HISTORY_KEY) || [];
+    renderHistoryList();
+  }catch(e){
+    console.error(e);
+    historyList.innerHTML = `<div class="error-msg">Error técnico: ${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function formatFecha(iso){
+  try{
+    const d = new Date(iso);
+    return d.toLocaleString("es-AR", { day:"2-digit", month:"2-digit", year:"2-digit", hour:"2-digit", minute:"2-digit" });
+  }catch(_){
+    return iso;
+  }
+}
+
+function renderHistoryList(){
+  if(history.length === 0){
+    historyList.innerHTML = "";
+    emptyHistoryMsg.classList.remove("hidden");
+    return;
+  }
+  emptyHistoryMsg.classList.add("hidden");
+
+  historyList.innerHTML = history.map(h => `
+    <div class="admin-item">
+      <div class="admin-item-info">
+        <div class="benefit-name">${escapeHtml(h.dni)}${h.nombre ? ` — ${escapeHtml(h.nombre)}` : ""}</div>
+        <div class="benefit-points">${formatFecha(h.fecha)}${h.encontrado ? "" : ` · <span style="color:var(--danger);">no encontrado</span>`}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function clearHistory(){
+  if(history.length === 0){
+    showToast("No hay historial para borrar");
+    return;
+  }
+  if(!confirm(`¿Borrar las ${history.length} consultas registradas? Esta acción no se puede deshacer.`)) return;
+
+  clearHistoryBtn.disabled = true;
+  const backup = [...history];
+  history = [];
+
+  const ok = await redisSet(HISTORY_KEY, history);
+  if(ok){
+    renderHistoryList();
+    showToast("Historial borrado");
+  }else{
+    history = backup;
+    showToast("Error al borrar, intentá de nuevo");
+  }
+  clearHistoryBtn.disabled = false;
+}
 
 // ============== TOAST ==============
 function showToast(msg){
