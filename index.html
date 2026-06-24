@@ -428,6 +428,7 @@
     margin-bottom:20px;
   }
   .black-card{
+    --rot:-10deg;
     position:relative;
     width:92%;
     aspect-ratio:1.586/1;
@@ -440,15 +441,21 @@
       -6px 10px 20px rgba(0,0,0,0.5),
       inset 0 1px 1px rgba(255,255,255,0.08),
       inset 0 -1px 1px rgba(0,0,0,0.5);
-    transform:perspective(800px) rotateY(-10deg);
+    transform:rotateY(var(--rot));
     padding:22px 24px;
     color:var(--text);
     overflow:hidden;
+    touch-action:none;
+    cursor:grab;
+    user-select:none;
+    -webkit-user-select:none;
   }
+  .black-card.dragging{cursor:grabbing;}
+  .black-card.settling{transition:transform .6s cubic-bezier(0.22, 0.61, 0.36, 1);}
   .card-content{
     position:relative;
     z-index:2;
-    transform:rotateY(10deg);
+    transform:rotateY(calc(-1 * var(--rot)));
     height:100%;
     display:flex;
     flex-direction:column;
@@ -820,7 +827,7 @@ function renderResultado(nombre, puntos, listaBeneficios, dni){
 
   const html = `
     <div class="card-stage">
-      <div class="black-card">
+      <div class="black-card" id="membershipCard">
         <div class="black-card-edge"></div>
         <div class="card-content">
           <div class="card-top">
@@ -868,12 +875,115 @@ function renderResultado(nombre, puntos, listaBeneficios, dni){
   `;
 
   resultArea.innerHTML = html;
+  initCardDrag();
 }
 
 function escapeHtml(str){
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ============== TARJETA: ARRASTRE 3D CON INERCIA ==============
+let _cardDragCleanup = null;
+
+function initCardDrag(){
+  if(_cardDragCleanup){
+    _cardDragCleanup();
+    _cardDragCleanup = null;
+  }
+
+  const card = document.getElementById("membershipCard");
+  if(!card) return;
+
+  const BASE_ROT = -10;   // angulo de reposo (grados)
+  const SENSITIVITY = 0.35; // cuanto gira por pixel arrastrado
+  const FRICTION = 0.94;   // que tan rapido frena la inercia (mas cerca de 1 = frena mas lento)
+  const MIN_VELOCITY = 0.05; // umbral para detener la animacion de inercia
+
+  let currentRot = BASE_ROT;
+  let pointerActive = false;
+  let lastX = 0;
+  let lastMoveTime = 0;
+  let velocity = 0; // grados por frame, aproximado
+  let inertiaFrame = null;
+
+  function applyRotation(deg){
+    currentRot = deg;
+    card.style.setProperty("--rot", `${deg}deg`);
+  }
+
+  function stopInertia(){
+    if(inertiaFrame){
+      cancelAnimationFrame(inertiaFrame);
+      inertiaFrame = null;
+    }
+  }
+
+  function runInertia(){
+    stopInertia();
+    function step(){
+      velocity *= FRICTION;
+      if(Math.abs(velocity) < MIN_VELOCITY){
+        velocity = 0;
+        inertiaFrame = null;
+        return;
+      }
+      applyRotation(currentRot + velocity);
+      inertiaFrame = requestAnimationFrame(step);
+    }
+    inertiaFrame = requestAnimationFrame(step);
+  }
+
+  function onPointerDown(e){
+    pointerActive = true;
+    stopInertia();
+    card.classList.remove("settling");
+    card.classList.add("dragging");
+    lastX = e.clientX;
+    lastMoveTime = performance.now();
+    velocity = 0;
+    card.setPointerCapture && e.pointerId !== undefined && card.setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e){
+    if(!pointerActive) return;
+    const now = performance.now();
+    const dx = e.clientX - lastX;
+    const dt = Math.max(1, now - lastMoveTime);
+
+    const deltaDeg = dx * SENSITIVITY;
+    applyRotation(currentRot + deltaDeg);
+
+    // Velocidad instantanea en grados/frame (asumiendo ~16ms por frame como referencia)
+    velocity = (deltaDeg / dt) * 16;
+
+    lastX = e.clientX;
+    lastMoveTime = now;
+  }
+
+  function onPointerUp(){
+    if(!pointerActive) return;
+    pointerActive = false;
+    card.classList.remove("dragging");
+
+    if(Math.abs(velocity) > MIN_VELOCITY){
+      runInertia();
+    }
+  }
+
+  card.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
+
+  _cardDragCleanup = function(){
+    stopInertia();
+    card.removeEventListener("pointerdown", onPointerDown);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
+  };
 }
 
 // ============== UI: NAVEGACION ADMIN ==============
